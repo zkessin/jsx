@@ -11,6 +11,7 @@
 init([]) -> [].
 
 handle_event(end_json, State) -> lists:reverse([end_json] ++ State);
+handle_event({_, Event}, State) -> [Event] ++ State;
 handle_event(Event, State) -> [Event] ++ State.
 
 
@@ -46,9 +47,9 @@ nested_object() ->
         [{<<"key">>, [{<<"key">>, [{}]}]}],
         [
             start_object,
-                {key, <<"key">>},
+                <<"key">>,
                 start_object,
-                    {key, <<"key">>},
+                    <<"key">>,
                     start_object,
                     end_object,
                 end_object,
@@ -67,7 +68,7 @@ naked_strings() ->
             String,
             <<"\"", (list_to_binary(String))/binary, "\"">>,
             list_to_binary(String),
-            [{string, list_to_binary(String)}]
+            [list_to_binary(String)]
         }
         || String <- Raw
     ].
@@ -92,7 +93,7 @@ naked_integers() ->
             integer_to_list(X),
             list_to_binary(integer_to_list(X)),
             X,
-            [{integer, X}]
+            [X]
         }
         || X <- Raw ++ [ -1 * Y || Y <- Raw ] ++ [0]
     ].
@@ -122,7 +123,7 @@ naked_floats() ->
             sane_float_to_list(X),
             list_to_binary(sane_float_to_list(X)),
             X,
-            [{float, X}]
+            [X]
         }
         || X <- Raw ++ [ -1 * Y || Y <- Raw ]
     ].
@@ -139,7 +140,7 @@ naked_literals() ->
             atom_to_list(Literal),
             atom_to_binary(Literal, unicode),
             Literal,
-            [{literal, Literal}]
+            [Literal]
         }
         || Literal <- [true, false, null]
     ].
@@ -158,24 +159,24 @@ compound_object() ->
         [
             start_array,
                 start_object,
-                    {key, <<"alpha">>},
+                    <<"alpha">>,
                     start_array,
-                        {integer, 1},
-                        {integer, 2},
-                        {integer, 3},
+                        1,
+                        2,
+                        3,
                     end_array,
-                    {key, <<"beta">>},
+                    <<"beta">>,
                     start_object,
-                        {key, <<"alpha">>},
+                        <<"alpha">>,
                         start_array,
-                            {float, 1.0},
-                            {float, 2.0},
-                            {float, 3.0},
+                            1.0,
+                            2.0,
+                            3.0,
                         end_array,
-                        {key, <<"beta">>},
+                        <<"beta">>,
                         start_array,
-                            {literal, true},
-                            {literal, false},
+                            true,
+                            false,
                         end_array,
                     end_object,
                 end_object,
@@ -202,7 +203,7 @@ wrap_with_object({Title, JSON, Term, Events}) ->
         "{\"key\":" ++ Title ++ "}",
         <<"{\"key\":", JSON/binary, "}">>,
         [{<<"key">>, Term}],
-        [start_object, {key, <<"key">>}] ++ Events ++ [end_object]
+        [start_object, <<"key">>] ++ Events ++ [end_object]
     }.
 
 
