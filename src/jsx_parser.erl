@@ -26,6 +26,10 @@
 -export([parser/3, resume/5]).
 -export([init/1, handle_event/2]).
 
+-ifdef(TEST).
+-export([clean_string/2, json_escape_sequence/1]).
+-endif.
+
 
 -spec parser(Handler::module(), State::any(), Config::jsx:config()) -> jsx:parser().
 
