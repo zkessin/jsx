@@ -70,33 +70,58 @@ parse_config([], Config) ->
     Config.
 
 
-init(Config) -> {[[]], parse_config(Config)}.
+% internal state of the handler is a record with three fields:
+%   stack
+%   acc
+%   config
+%
+% state is a list of atoms used by a simple pda to keep track of what
+%   state it is currently in
+% acc is the current object/list in media res
+% config is the config, duh
+
+-record(state, {
+    stack = [value],
+    acc = [],
+    config
+}).
 
 
-handle_event(end_json, {[[Terms]], _Config}) -> Terms;
+init(Config) -> #state{config = parse_config(Config)}.
 
-handle_event(start_object, {Terms, Config}) -> {[[]|Terms], Config};
-handle_event(end_object, {[[], {key, Key}, Last|Terms], Config}) ->
-    {[[{Key, [{}]}] ++ Last] ++ Terms, Config};
-handle_event(end_object, {[Object, {key, Key}, Last|Terms], Config}) ->
-    {[[{Key, lists:reverse(Object)}] ++ Last] ++ Terms, Config};
-handle_event(end_object, {[[], Last|Terms], Config}) ->
-    {[[[{}]] ++ Last] ++ Terms, Config};
-handle_event(end_object, {[Object, Last|Terms], Config}) ->
-    {[[lists:reverse(Object)] ++ Last] ++ Terms, Config};
+handle_event(Event, State = #state{stack = []}) ->
+    done(Event, State);
+handle_event(Event, State = #state{stack = [Next|Stack]}) ->
+    case Next of
+        key -> key(Event, State#state{stack = Stack});
+        value -> value(Event, State#state{stack = Stack});
+        maybe_done -> maybe_done(Event, State#state{stack = Stack})
+    end.
 
-handle_event(start_array, {Terms, Config}) -> {[[]|Terms], Config};
-handle_event(end_array, {[List, {key, Key}, Last|Terms], Config}) ->
-    {[[{Key, lists:reverse(List)}] ++ Last] ++ Terms, Config};
-handle_event(end_array, {[List, Last|Terms], Config}) ->
-    {[[lists:reverse(List)] ++ Last] ++ Terms, Config};
 
-handle_event({key, Key}, {Terms, Config}) -> {[{key, format_key(Key, Config)}] ++ Terms, Config};
+key(Key, State = #state{stack = Stack, acc = Acc, config = Config}) ->
+    State#state{stack = [value] ++ Stack, acc = acc({key, format_key(Key, Config)}, Acc)}.
 
-handle_event({_, Event}, {[{key, Key}, Last|Terms], Config}) ->
-    {[[{Key, Event}] ++ Last] ++ Terms, Config};
-handle_event({_, Event}, {[Last|Terms], Config}) ->
-    {[[Event] ++ Last] ++ Terms, Config}.
+value(start_object, State = #state{stack = Stack, acc = Acc}) ->
+    State#state{stack = [maybe_done, object] ++ Stack, acc = [[]] ++ Acc};
+value(start_array, State = #state{stack = Stack, acc = Acc}) ->
+    State#state{stack = [maybe_done, list] ++ Stack, acc = [[]] ++ Acc};
+value(Event, State = #state{stack = Stack, acc = Acc}) ->
+    State#state{stack = [maybe_done] ++ Stack, acc = acc(Event, Acc)}.
+
+maybe_done(end_object, State = #state{stack = [object|Stack], acc = [[]|Acc]}) ->
+    State#state{stack = [maybe_done] ++ Stack, acc = acc([{}], Acc)};
+maybe_done(end_object, State = #state{stack = [object|Stack], acc = [Object|Acc]}) ->
+    State#state{stack = [maybe_done] ++ Stack, acc = acc(lists:reverse(Object), Acc)};
+maybe_done(end_array, State = #state{stack = [list|Stack], acc = [List|Acc]}) ->
+    State#state{stack = [maybe_done] ++ Stack, acc = acc(lists:reverse(List), Acc)};
+maybe_done(Event, State = #state{stack = [object|Stack]}) ->
+    handle_event(Event, State#state{stack = [key, object] ++ Stack});
+maybe_done(Event, State = #state{stack = [list|Stack]}) ->
+    handle_event(Event, State#state{stack = [value, list] ++ Stack});
+maybe_done(Event, State) -> done(Event, State).
+
+done(end_json, #state{acc = [Result]}) -> Result.
 
 
 format_key(Key, Config) ->
@@ -105,6 +130,11 @@ format_key(Key, Config) ->
         ; atom -> binary_to_atom(Key, utf8)
         ; existing_atom -> binary_to_existing_atom(Key, utf8)
     end.
+
+
+acc(Event, []) -> [Event];
+acc(Event, [[{key, Key}|Object]|Acc]) -> [[{Key, Event}] ++ Object] ++ Acc;
+acc(Event, [List|Acc]) -> [[Event] ++ List] ++ Acc.
 
 
 
@@ -150,7 +180,7 @@ handle_event_test_() ->
         {
             Title, ?_assertEqual(
                 Term,
-                lists:foldl(fun handle_event/2, {[[]], #config{}}, Events ++ [end_json])
+                lists:foldl(fun handle_event/2, init([]), Events ++ [end_json])
             )
         } || {Title, _, Term, Events} <- Data
     ].

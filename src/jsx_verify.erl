@@ -73,23 +73,60 @@ parse_config([], Config) ->
     Config.
 
 
-init(Config) -> {parse_config(Config), []}.
+% internal state of the handler is a record with three fields:
+%   stack
+%   acc
+%   config
+%
+% state is a list of atoms used by a simple pda to keep track of what
+%   state it is currently in
+% keys is a stack of keys already used in the current context
+% config is the config, duh
+
+-record(state, {
+    stack = [],
+    keys = [],
+    config
+}).
 
 
+init(Config) -> #state{config = parse_config(Config)}.
+
+
+% reaching `end_json` means everything is good so return `true`
 handle_event(end_json, _) -> true;
 
-handle_event(_, {Config, _} = State) when Config#config.repeated_keys == true -> State;
+% if repeated keys aren't being checked for do nothing, basically
+handle_event(_, State = #state{config = Config}) when Config#config.repeated_keys == true -> State;
 
-handle_event(start_object, {Config, Keys}) -> {Config, [dict:new()] ++ Keys};
-handle_event(end_object, {Config, [_|Keys]}) -> {Config, Keys};
+% for each object we push a dict onto a stack to contain seen keys
+handle_event(start_object, State = #state{stack = Stack, keys = Keys}) ->
+    State#state{stack = [key] ++ Stack, keys = [dict:new()] ++ Keys};
+% pop it off the stack when the object ends
+handle_event(end_object, State = #state{stack = [key|Stack], keys = [_|Keys]}) ->
+    State#state{stack = Stack, keys = Keys};
 
-handle_event({key, Key}, {Config, [CurrentKeys|Keys]}) ->
+% no checking for keys/values in arrays
+handle_event(start_array, State = #state{stack = Stack}) ->
+    State#state{stack = [array] ++ Stack};
+% push `key` back on the stack if we're exiting a value context
+handle_event(end_array, State = #state{stack = [array, value|Stack]}) ->
+    State#state{stack = [key] ++ Stack};
+handle_event(end_array, State = #state{stack = [array|Stack]}) ->
+    State#state{stack = Stack};
+handle_event(_, State = #state{stack = [array|_]}) -> State;
+
+% read a key, check that it's unused then push `value` on the stack so only the last clause
+%   matches
+handle_event(Key, State = #state{stack = [key|Stack], keys = [CurrentKeys|Keys]}) ->
     case dict:is_key(Key, CurrentKeys) of
         true -> erlang:error(badarg);
-        false -> {Config, [dict:store(Key, blah, CurrentKeys)|Keys]}
+        false -> State#state{stack = [value] ++ Stack, keys = [dict:store(Key, blah, CurrentKeys)|Keys]}
     end;
 
-handle_event(_, State) -> State.
+% push `key` on the stack so only `end_object` or an appropriate value matches
+handle_event(_, State = #state{stack = [value|Stack]}) ->
+    State#state{stack = [key] ++ Stack}.
 
 
 
@@ -119,21 +156,21 @@ config_test_() ->
 repeated_keys_test_() ->
     RepeatedKey = [
         start_object,
-            {key, <<"alpha">>},
-            {literal, true},
-            {key, <<"alpha">>},
-            {literal, false},
+            <<"alpha">>,
+            true,
+            <<"alpha">>,
+            false,
         end_object,
         end_json
     ],
     NestedKey = [
         start_object,
-            {key, <<"alpha">>},
+            <<"alpha">>,
             start_object,
-                {key, <<"alpha">>},
+                <<"alpha">>,
                 start_object,
-                    {key, <<"alpha">>},
-                    {literal, true},
+                    <<"alpha">>,
+                    <<"alpha">>,
                 end_object,
             end_object,
         end_object,
@@ -141,14 +178,14 @@ repeated_keys_test_() ->
     ],
     [
         {"repeated key", ?_assert(
-            lists:foldl(fun handle_event/2, {#config{}, []}, RepeatedKey)
+            lists:foldl(fun handle_event/2, init([]), RepeatedKey)
         )},
         {"no repeated key", ?_assertError(
             badarg,
-            lists:foldl(fun handle_event/2, {#config{repeated_keys=false}, []}, RepeatedKey)
+            lists:foldl(fun handle_event/2, init([no_repeated_keys]), RepeatedKey)
         )},
         {"nested key", ?_assert(
-            lists:foldl(fun handle_event/2, {#config{repeated_keys=false}, []}, NestedKey)
+            lists:foldl(fun handle_event/2, init([no_repeated_keys]), NestedKey)
         )}
     ].
 
@@ -159,7 +196,7 @@ handle_event_test_() ->
         {
             Title, ?_assertEqual(
                 true,
-                lists:foldl(fun handle_event/2, {#config{}, []}, Events ++ [end_json])
+                lists:foldl(fun handle_event/2, init([]), Events ++ [end_json])
             )
         } || {Title, _, _, Events} <- Data
     ].

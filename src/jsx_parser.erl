@@ -91,19 +91,19 @@ value([start_object|Tokens], Handler, Stack, Config) ->
 value([start_array|Tokens], Handler, Stack, Config) ->
     array(Tokens, handle_event(start_array, Handler, Config), [array|Stack], Config);
 value([true|Tokens], Handler, Stack, Config) ->
-    maybe_done(Tokens, handle_event({literal, true}, Handler, Config), Stack, Config);
+    maybe_done(Tokens, handle_event(true, Handler, Config), Stack, Config);
 value([false|Tokens], Handler, Stack, Config) ->
-    maybe_done(Tokens, handle_event({literal, false}, Handler, Config), Stack, Config);
+    maybe_done(Tokens, handle_event(false, Handler, Config), Stack, Config);
 value([null|Tokens], Handler, Stack, Config) ->
-    maybe_done(Tokens, handle_event({literal, null}, Handler, Config), Stack, Config);
+    maybe_done(Tokens, handle_event(null, Handler, Config), Stack, Config);
 value([Number|Tokens], Handler, Stack, Config) when is_integer(Number) ->
-    maybe_done(Tokens, handle_event({integer, Number}, Handler, Config), Stack, Config);
+    maybe_done(Tokens, handle_event(Number, Handler, Config), Stack, Config);
 value([Number|Tokens], Handler, Stack, Config) when is_float(Number) ->
-    maybe_done(Tokens, handle_event({float, Number}, Handler, Config), Stack, Config);
+    maybe_done(Tokens, handle_event(Number, Handler, Config), Stack, Config);
 value([String|Tokens], Handler, Stack, Config) when is_binary(String) ->
     case clean_string(String, Tokens, Handler, Stack, Config) of
         Clean when is_binary(Clean) ->
-            maybe_done(Tokens, handle_event({string, Clean}, Handler, Config), Stack, Config);
+            maybe_done(Tokens, handle_event(Clean, Handler, Config), Stack, Config);
         Error -> Error
     end;
 value([], Handler, Stack, Config) ->
@@ -120,7 +120,7 @@ object([{Key, Value}|Tokens], Handler, Stack, Config) ->
 object([Key|Tokens], Handler, Stack, Config) when is_atom(Key); is_binary(Key) ->
     case clean_string(fix_key(Key), Tokens, Handler, Stack, Config) of
         Clean when is_binary(Clean) ->
-            value(Tokens, handle_event({key, Clean}, Handler, Config), Stack, Config);
+            value(Tokens, handle_event(Clean, Handler, Config), Stack, Config);
         Error -> Error
     end;
 object([], Handler, Stack, Config) ->
@@ -167,7 +167,7 @@ fix_key(Key) when is_binary(Key) -> Key.
 
 clean_string(Bin, Tokens, Handler, Stack, Config) ->
     case clean_string(Bin, Config) of
-        {error, badarg} -> ?error(string, [{string, Bin}|Tokens], Handler, Stack, Config);
+        {error, badarg} -> ?error(string, [Bin|Tokens], Handler, Stack, Config);
         String -> String
     end.
 
@@ -239,7 +239,7 @@ custom_error_handler_test_() ->
             parse_error([<<"">>, true, end_json], [{error_handler, Error}])
         )},
         {"string error", ?_assertEqual(
-            {string, [{string, <<239, 191, 191>>}, end_json]},
+            {string, [<<239, 191, 191>>, end_json]},
             parse_error([<<239, 191, 191>>, end_json], [{error_handler, Error}])
         )}
     ].

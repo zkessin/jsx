@@ -567,19 +567,19 @@ string(Bin, Handler, Acc, Stack, Config) ->
 
 
 doublequote(<<Rest/binary>>, Handler, Acc, [key|_] = Stack, Config) ->
-    colon(Rest, handle_event({key, end_seq(Acc, Config)}, Handler, Config), Stack, Config);
+    colon(Rest, handle_event(end_seq(Acc, Config), Handler, Config), Stack, Config);
 doublequote(<<Rest/binary>>, Handler, Acc, [singlequote|_] = Stack, Config) ->
     string(Rest, Handler,acc_seq(Acc, maybe_replace(?doublequote, Config)), Stack, Config);
 doublequote(<<>>, Handler, Acc, [singlequote|_] = Stack, Config) ->
     incomplete(string, <<?doublequote>>, Handler, Acc, Stack, Config);
 doublequote(<<Rest/binary>>, Handler, Acc, Stack, Config) ->
-    maybe_done(Rest, handle_event({string, end_seq(Acc, Config)}, Handler, Config), Stack, Config).
+    maybe_done(Rest, handle_event(end_seq(Acc, Config), Handler, Config), Stack, Config).
 
 
 singlequote(<<Rest/binary>>, Handler, Acc, [singlequote, key|Stack], Config) ->
-    colon(Rest, handle_event({key, end_seq(Acc, Config)}, Handler, Config), [key|Stack], Config);
+    colon(Rest, handle_event(end_seq(Acc, Config), Handler, Config), [key|Stack], Config);
 singlequote(<<Rest/binary>>, Handler, Acc, [singlequote|Stack], Config) ->
-    maybe_done(Rest, handle_event({string, end_seq(Acc, Config)}, Handler, Config), Stack, Config);
+    maybe_done(Rest, handle_event(end_seq(Acc, Config), Handler, Config), Stack, Config);
 singlequote(<<Rest/binary>>, Handler, Acc, Stack, Config) ->
     string(Rest, Handler, acc_seq(Acc, ?singlequote), Stack, Config).
 
@@ -845,14 +845,14 @@ finish_number(Bin, Handler, {NumType, Acc}, Stack, Config) ->
             ?error(value, <<$0, Bin/binary>>, Handler, OldAcc, Stack, Config)
     end.
 
-format_number({zero, Acc}) -> {integer, list_to_integer(lists:reverse(Acc))};
-format_number({integer, Acc}) -> {integer, list_to_integer(lists:reverse(Acc))};
-format_number({decimal, Acc}) -> {float, list_to_float(lists:reverse(Acc))};
-format_number({exp, Acc}) -> {float, list_to_float(lists:reverse(Acc))}.
+format_number({zero, Acc}) -> list_to_integer(lists:reverse(Acc));
+format_number({integer, Acc}) -> list_to_integer(lists:reverse(Acc));
+format_number({decimal, Acc}) -> list_to_float(lists:reverse(Acc));
+format_number({exp, Acc}) -> list_to_float(lists:reverse(Acc)).
 
 
 true(<<$r, $u, $e, Rest/binary>>, Handler, Stack, Config) ->
-    maybe_done(Rest, handle_event({literal, true}, Handler, Config), Stack, Config);
+    maybe_done(Rest, handle_event(true, Handler, Config), Stack, Config);
 true(<<$r, $u>>, Handler, Stack, Config) ->
     incomplete(true, <<$r, $u>>, Handler, Stack, Config);
 true(<<$r>>, Handler, Stack, Config) ->
@@ -864,7 +864,7 @@ true(Bin, Handler, Stack, Config) ->
 
 
 false(<<$a, $l, $s, $e, Rest/binary>>, Handler, Stack, Config) ->
-    maybe_done(Rest, handle_event({literal, false}, Handler, Config), Stack, Config);
+    maybe_done(Rest, handle_event(false, Handler, Config), Stack, Config);
 false(<<$a, $l, $s>>, Handler, Stack, Config) ->
     incomplete(false, <<$a, $l, $s>>, Handler, Stack, Config);
 false(<<$a, $l>>, Handler, Stack, Config) ->
@@ -878,7 +878,7 @@ false(Bin, Handler, Stack, Config) ->
 
 
 null(<<$u, $l, $l, Rest/binary>>, Handler, Stack, Config) ->
-    maybe_done(Rest, handle_event({literal, null}, Handler, Config), Stack, Config);
+    maybe_done(Rest, handle_event(null, Handler, Config), Stack, Config);
 null(<<$u, $l>>, Handler, Stack, Config) ->
     incomplete(null, <<$u, $l>>, Handler, Stack, Config);
 null(<<$u>>, Handler, Stack, Config) ->
