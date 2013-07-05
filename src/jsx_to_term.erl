@@ -52,7 +52,7 @@ to_term(Source, Config) when is_list(Config) ->
 parse_config(Config) -> parse_config(Config, #config{}).
 
 parse_config([{labels, Val}|Rest], Config)
-        when Val == binary; Val == atom; Val == existing_atom ->
+        when Val == binary; Val == atom; Val == existing_atom; Val == attempt_atom ->
     parse_config(Rest, Config#config{labels = Val});
 parse_config([labels|Rest], Config) ->
     parse_config(Rest, Config#config{labels = binary});
@@ -129,6 +129,12 @@ format_key(Key, Config) ->
         binary -> Key
         ; atom -> binary_to_atom(Key, utf8)
         ; existing_atom -> binary_to_existing_atom(Key, utf8)
+        ; attempt_atom ->
+            try binary_to_existing_atom(Key, utf8) of
+                Result -> Result
+            catch
+                error:badarg -> Key
+            end
     end.
 
 
@@ -154,6 +160,10 @@ config_test_() ->
             #config{labels=existing_atom},
             parse_config([{labels, existing_atom}])
         )},
+        {"sloppy existing atom labels", ?_assertEqual(
+            #config{labels=attempt_atom},
+            parse_config([{labels, attempt_atom}])
+        )},
         {"invalid opt flag", ?_assertError(badarg, parse_config([error]))},
         {"invalid opt tuple", ?_assertError(badarg, parse_config([{error, true}]))}
     ].
@@ -170,6 +180,14 @@ format_key_test_() ->
         {"nonexisting atom key", ?_assertError(
             badarg,
             format_key(<<"nonexistentatom">>, #config{labels=existing_atom})
+        )},
+        {"sloppy existing atom key", ?_assertEqual(
+            key,
+            format_key(<<"key">>, #config{labels=attempt_atom})
+        )},
+        {"nonexisting atom key", ?_assertEqual(
+            <<"nonexistentatom">>,
+            format_key(<<"nonexistentatom">>, #config{labels=attempt_atom})
         )}
     ].
 
