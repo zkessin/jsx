@@ -68,6 +68,10 @@ value(Int, {Handler, State}, _Config) when is_integer(Int) ->
 value(Literal, {Handler, State}, _Config)
         when Literal == true; Literal == false; Literal == null ->
     Handler:handle_event({literal, Literal}, State);
+value(Literal, {Handler, State}, _Config) 
+        when Literal == undefined ->
+    Handler:handle_event({literal, null}, State);
+
 value([{}], {Handler, State}, _Config) ->
     Handler:handle_event(end_object, Handler:handle_event(start_object, State));
 value([], {Handler, State}, _Config) ->
